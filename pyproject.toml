@@ -1,0 +1,45 @@
+[project]
+name = "phi-agent"
+version = "0.1.0"
+description = "phi-agent Python SDK — build AI agents with Python, powered by Rust runtime"
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "hibuka-labs" },
+]
+keywords = ["agent", "ai", "llm", "framework"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "module"
+asyncio_default_test_loop_scope = "module"
+testpaths = ["tests"]
+markers = [
+    "e2e: tests that require phi serve + LLM API key",
+    "slow: tests that may take longer than 60s",
+]
