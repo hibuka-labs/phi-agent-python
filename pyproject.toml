@@ -25,6 +25,7 @@ dependencies = []
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
+    "gnureadline>=8; platform_system == 'Darwin'",
 ]
 
 [build-system]

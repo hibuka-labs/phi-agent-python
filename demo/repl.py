@@ -10,6 +10,12 @@ import json
 import os
 from pathlib import Path
 
+# Fix Chinese backspace on macOS (libedit bug)
+try:
+    import gnureadline  # noqa: F401
+except ImportError:
+    pass
+
 from phi_agent import Agent, tool
 
 
