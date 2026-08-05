@@ -77,9 +77,9 @@ def _find_phi_binary() -> str:
 def _ensure_phi_binary() -> str:
     """Locate or download the ``phi`` binary.
 
-    Calls :func:`_find_phi_binary` first.  If that fails, automatically
-    downloads the binary via the bundled ``download-phi.sh`` script, then
-    retries.
+    Calls :func:`_find_phi_binary` first.  If PHI_PATH is not set and
+    the binary cannot be found, automatically downloads it via the
+    bundled ``download-phi.sh`` script, then retries.
 
     Raises ``FileNotFoundError`` if the binary still cannot be found
     after the download attempt.
@@ -87,7 +87,14 @@ def _ensure_phi_binary() -> str:
     try:
         return _find_phi_binary()
     except FileNotFoundError:
-        pass  # try downloading
+        pass
+
+    # Only auto-download when PHI_PATH is NOT explicitly set.
+    # If the user set PHI_PATH, trust it and don't override.
+    if os.environ.get("PHI_PATH"):
+        raise FileNotFoundError(
+            f"PHI_PATH={os.environ['PHI_PATH']}: file not found"
+        )
 
     download_script = (
         Path(__file__).resolve().parent.parent.parent / "bin" / "download-phi.sh"
