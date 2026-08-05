@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-VERSION="${1:-0.3.0}"
+VERSION="${1:-0.2.5}"
 BASE_URL="https://github.com/hibuka-labs/phi-agent/releases/download/v${VERSION}"
 
 case "$(uname -s)" in

@@ -74,6 +74,56 @@ def _find_phi_binary() -> str:
     )
 
 
+def _ensure_phi_binary() -> str:
+    """Locate or download the ``phi`` binary.
+
+    Calls :func:`_find_phi_binary` first.  If that fails, automatically
+    downloads the binary via the bundled ``download-phi.sh`` script, then
+    retries.
+
+    Raises ``FileNotFoundError`` if the binary still cannot be found
+    after the download attempt.
+    """
+    try:
+        return _find_phi_binary()
+    except FileNotFoundError:
+        pass  # try downloading
+
+    download_script = (
+        Path(__file__).resolve().parent.parent.parent / "bin" / "download-phi.sh"
+    )
+    if download_script.is_file():
+        _log.info("phi binary not found — attempting auto-download")
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["bash", str(download_script)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                _log.info("phi binary downloaded successfully")
+            else:
+                _log.warning(
+                    "auto-download failed (exit %s): %s",
+                    result.returncode,
+                    result.stderr.strip() or result.stdout.strip(),
+                )
+        except Exception as exc:
+            _log.warning("auto-download failed: %s", exc)
+
+        try:
+            return _find_phi_binary()
+        except FileNotFoundError:
+            pass
+
+    raise FileNotFoundError(
+        "phi binary not found and auto-download failed.  "
+        "Install phi-agent (Rust) or set PHI_PATH."
+    )
+
+
 class PhiProcess:
     """Manages a ``phi serve`` subprocess.
 
@@ -85,7 +135,7 @@ class PhiProcess:
     """
 
     def __init__(self, phi_path: str | None = None, env: dict[str, str] | None = None) -> None:
-        self._phi_path = phi_path or _find_phi_binary()
+        self._phi_path = phi_path or _ensure_phi_binary()
         self._env = env or {}
         self._process: asyncio.subprocess.Process | None = None
         self._stream: ProtocolStream | None = None
@@ -170,22 +220,33 @@ class PhiProcess:
         """Cancel any in-flight turn and terminate the subprocess."""
         _log.info("closing phi process")
 
-        # Cancel stderr drain first
+        # Kill the process first — prevents asyncio pipe_connection_lost
+        # callback races during Ctrl+C shutdown.
+        if self._process is not None:
+            try:
+                self._process.terminate()
+                await asyncio.wait_for(self._process.wait(), timeout=3)
+                _log.info(f"phi process terminated, rc={self._process.returncode}")
+            except (ProcessLookupError, TimeoutError, asyncio.TimeoutError):
+                try:
+                    self._process.kill()
+                    await self._process.wait()
+                except ProcessLookupError:
+                    pass
+            except Exception:
+                pass
+
+        # Cancel stderr drain
         if self._stderr_task is not None:
             self._stderr_task.cancel()
             self._stderr_task = None
 
+        # Close stream — ignore errors during shutdown
         if self._stream is not None:
-            await self._stream.close()
-        if self._process is not None:
             try:
-                self._process.terminate()
-                await asyncio.wait_for(self._process.wait(), timeout=5)
-                _log.info(f"phi process terminated, rc={self._process.returncode}")
-            except (ProcessLookupError, TimeoutError, asyncio.TimeoutError):
-                self._process.kill()
-                await self._process.wait()
-                _log.warning("phi process killed after timeout")
+                await self._stream.close()
+            except Exception:
+                pass
 
     # ── Context manager ────────────────────────────────────────────────
 
