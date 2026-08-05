@@ -87,12 +87,10 @@ def _ensure_phi_binary() -> str:
 
     raise FileNotFoundError(
         "phi binary not found.\n\n"
-        "Options:\n"
-        "  1. Set PHI_PATH to the phi binary location\n"
-        "  2. Run: python -m phi_agent.download\n"
-        "  3. Install via cargo: cargo install phi-agent\n"
-        "\n"
-        "See https://github.com/hibuka-labs/phi-agent for details."
+        "Install via cargo:\n"
+        "  cargo install phi-agent\n\n"
+        "Or set PHI_PATH to an existing binary.\n"
+        "See https://github.com/hibuka-labs/phi-agent"
     )
 
 
