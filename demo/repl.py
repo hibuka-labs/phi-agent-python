@@ -94,19 +94,7 @@ def print_banner(model: str):
 
 
 async def main():
-    # Load .env so the banner shows the correct model
     _load_dotenv()
-
-    phi_path = os.environ.get("PHI_PATH")
-    if not phi_path:
-        # Try workspace build first (development), then bundled (production)
-        workspace = Path(__file__).resolve().parent.parent.parent.parent / "phi-agent" / "target" / "debug" / "phi"
-        if workspace.exists():
-            phi_path = str(workspace)
-        else:
-            bundled = Path(__file__).resolve().parent.parent / "bin" / "phi"
-            if bundled.exists():
-                phi_path = str(bundled)
 
     model = os.environ.get("LLM_MODEL", "gpt-4o")
 
@@ -115,7 +103,6 @@ async def main():
             model=model,
             api_key=os.environ.get("LLM_API_KEY"),
             base_url=os.environ.get("LLM_BASE_URL"),
-            phi_path=phi_path,
         )
         a.register(get_time)
         return a

@@ -75,59 +75,24 @@ def _find_phi_binary() -> str:
 
 
 def _ensure_phi_binary() -> str:
-    """Locate or download the ``phi`` binary.
+    """Locate the ``phi`` binary.
 
-    Calls :func:`_find_phi_binary` first.  If PHI_PATH is not set and
-    the binary cannot be found, automatically downloads it via the
-    bundled ``download-phi.sh`` script, then retries.
-
-    Raises ``FileNotFoundError`` if the binary still cannot be found
-    after the download attempt.
+    Calls :func:`_find_phi_binary` and raises ``FileNotFoundError`` with
+    actionable instructions if the binary cannot be found.
     """
     try:
         return _find_phi_binary()
     except FileNotFoundError:
         pass
 
-    # Only auto-download when PHI_PATH is NOT explicitly set.
-    # If the user set PHI_PATH, trust it and don't override.
-    if os.environ.get("PHI_PATH"):
-        raise FileNotFoundError(
-            f"PHI_PATH={os.environ['PHI_PATH']}: file not found"
-        )
-
-    download_script = (
-        Path(__file__).resolve().parent.parent.parent / "bin" / "download-phi.sh"
-    )
-    if download_script.is_file():
-        _log.info("phi binary not found — attempting auto-download")
-        import subprocess
-        try:
-            result = subprocess.run(
-                ["bash", str(download_script)],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode == 0:
-                _log.info("phi binary downloaded successfully")
-            else:
-                _log.warning(
-                    "auto-download failed (exit %s): %s",
-                    result.returncode,
-                    result.stderr.strip() or result.stdout.strip(),
-                )
-        except Exception as exc:
-            _log.warning("auto-download failed: %s", exc)
-
-        try:
-            return _find_phi_binary()
-        except FileNotFoundError:
-            pass
-
     raise FileNotFoundError(
-        "phi binary not found and auto-download failed.  "
-        "Install phi-agent (Rust) or set PHI_PATH."
+        "phi binary not found.\n\n"
+        "Options:\n"
+        "  1. Set PHI_PATH to the phi binary location\n"
+        "  2. Run: python -m phi_agent.download\n"
+        "  3. Install via cargo: cargo install phi-agent\n"
+        "\n"
+        "See https://github.com/hibuka-labs/phi-agent for details."
     )
 
 

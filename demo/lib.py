@@ -50,21 +50,10 @@ async def search(query: str) -> str:
 # ── Step 2: Create agent and register tools ──────────────────────────────
 
 async def main():
-    phi_path = os.environ.get("PHI_PATH")
-    if not phi_path:
-        workspace = Path(__file__).resolve().parent.parent.parent.parent / "phi-agent" / "target" / "debug" / "phi"
-        if workspace.exists():
-            phi_path = str(workspace)
-        else:
-            bundled = Path(__file__).resolve().parent.parent / "bin" / "phi"
-            if bundled.exists():
-                phi_path = str(bundled)
-
     agent = Agent(
         model=os.environ.get("LLM_MODEL", "gpt-4o"),
         api_key=os.environ.get("LLM_API_KEY"),
         base_url=os.environ.get("LLM_BASE_URL"),
-        phi_path=phi_path,
     )
     agent.register(get_time)
     agent.register(search)
