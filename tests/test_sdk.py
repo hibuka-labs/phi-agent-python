@@ -4,6 +4,7 @@ These tests validate that the protocol messages are correctly
 serialized / deserialized.  They do NOT require a running phi binary.
 """
 
+from phi_agent.agent import Agent
 from phi_agent.events import Event
 from phi_agent.tool import _build_parameters_schema, _type_to_json_schema, tool
 
@@ -55,6 +56,7 @@ class TestToolDecorator:
         assert greet.description == "Say hello."
         assert greet.parameters["properties"]["name"] == {"type": "string"}
         assert greet.parameters["required"] == ["name"]
+        assert greet.requirements == []
         result = await greet.func(name="World")
         assert result == "Hello, World"
 
@@ -65,6 +67,51 @@ class TestToolDecorator:
 
         assert greet.name == "hello"
         assert greet.description == "Greet someone"
+
+    async def test_tool_with_requirements(self):
+        @tool(requirements=["bash", "curl"])
+        async def shell_exec(cmd: str) -> str:
+            """Run a shell command."""
+            return f"ran: {cmd}"
+
+        assert shell_exec.name == "shell_exec"
+        assert shell_exec.requirements == ["bash", "curl"]
+
+
+class TestAgentConfig:
+    """Agent.__init__ accepts all RunConfig fields."""
+
+    def test_default_config(self):
+        agent = Agent()
+        assert agent._model == "gpt-4o"
+        assert agent._enable_thinking is True
+        assert agent._thinking_effort == "medium"
+        assert agent._thinking_budget is None
+        assert agent._max_tool_calls_per_turn is None
+        assert agent._max_consecutive_failures is None
+        assert agent._max_turns is None
+
+    def test_full_config(self):
+        agent = Agent(
+            model="gpt-4o-mini",
+            api_key="sk-test",
+            base_url="https://api.example.com/v1",
+            enable_thinking=False,
+            thinking_effort="low",
+            thinking_budget=16000,
+            max_tool_calls_per_turn=10,
+            max_consecutive_failures=3,
+            max_turns=5,
+        )
+        assert agent._model == "gpt-4o-mini"
+        assert agent._api_key == "sk-test"
+        assert agent._base_url == "https://api.example.com/v1"
+        assert agent._enable_thinking is False
+        assert agent._thinking_effort == "low"
+        assert agent._thinking_budget == 16000
+        assert agent._max_tool_calls_per_turn == 10
+        assert agent._max_consecutive_failures == 3
+        assert agent._max_turns == 5
 
 
 class TestJsonSchema:

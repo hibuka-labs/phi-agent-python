@@ -74,6 +74,7 @@ def tool(
     *,
     name: str | None = None,
     description: str | None = None,
+    requirements: list[str] | None = None,
 ):
     """Decorator that turns an async function into a phi-agent tool.
 
@@ -91,6 +92,11 @@ def tool(
         @tool(name="get_weather", description="Look up the weather")
         async def weather(city: str) -> str:
             ...
+
+        @tool(requirements=["bash", "curl"])
+        async def shell_cmd(cmd: str) -> str:
+            '''Run a shell command.'''
+            ...
     """
 
     def _decorator(fn: Callable[..., Any]) -> RegisteredTool:
@@ -102,6 +108,7 @@ def tool(
             description=tool_desc,
             parameters=schema,
             func=fn,
+            requirements=requirements or [],
         )
 
     if func is not None:
@@ -126,3 +133,4 @@ class RegisteredTool:
     description: str
     parameters: dict[str, Any]
     func: Callable[..., Any]
+    requirements: list[str] = field(default_factory=list)

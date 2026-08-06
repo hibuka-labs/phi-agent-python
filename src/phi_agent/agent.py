@@ -34,6 +34,10 @@ class Agent:
         base_url: str | None = None,
         enable_thinking: bool = True,
         thinking_effort: str = "medium",
+        thinking_budget: int | None = None,
+        max_tool_calls_per_turn: int | None = None,
+        max_consecutive_failures: int | None = None,
+        max_turns: int | None = None,
         phi_path: str | None = None,
     ) -> None:
         # Resolve config (env vars are fallbacks, not overrides)
@@ -42,6 +46,10 @@ class Agent:
         self._base_url = base_url or os.environ.get("LLM_BASE_URL")
         self._enable_thinking = enable_thinking
         self._thinking_effort = thinking_effort
+        self._thinking_budget = thinking_budget
+        self._max_tool_calls_per_turn = max_tool_calls_per_turn
+        self._max_consecutive_failures = max_consecutive_failures
+        self._max_turns = max_turns
         self._phi_path = phi_path
 
         # Registered tools (name → RegisteredTool)
@@ -55,6 +63,61 @@ class Agent:
     def register(self, tool: RegisteredTool) -> None:
         """Register a tool (function decorated with ``@tool``)."""
         self._tools[tool.name] = tool
+
+    # ── Session management ─────────────────────────────────────────────
+
+    async def create_session(
+        self,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new session, optionally with an external ID.
+
+        Returns the ``session_created`` message from the server, which
+        contains ``session_id`` and ``internal_id``.
+
+        Usage::
+
+            session = await agent.create_session(session_id="my-session")
+            async for event in agent.run("hello", session_id="my-session"):
+                ...
+        """
+        await self._ensure_started()
+
+        await self._proc.stream.send({  # type: ignore[union-attr]
+            "type": "create_session",
+            "session_id": session_id,
+        })
+        msg = await self._proc.stream.recv()  # type: ignore[union-attr]
+        if msg.get("type") != "session_created":
+            raise RuntimeError(
+                f"expected session_created, got {msg.get('type', '?')}"
+            )
+        return msg
+
+    # ── Tool listing ───────────────────────────────────────────────────
+
+    async def list_tools(self) -> list[dict[str, Any]]:
+        """List all tools registered with the phi runtime.
+
+        Returns a list of tool metadata dicts, each containing
+        ``name``, ``description``, ``origin``, ``version``, and
+        ``requirements``.
+
+        Usage::
+
+            tools = await agent.list_tools()
+            for t in tools:
+                print(f"{t['name']} ({t['origin']} v{t['version']})")
+        """
+        await self._ensure_started()
+
+        await self._proc.stream.send({"type": "list_tools"})  # type: ignore[union-attr]
+        msg = await self._proc.stream.recv()  # type: ignore[union-attr]
+        if msg.get("type") != "tools_listed":
+            raise RuntimeError(
+                f"expected tools_listed, got {msg.get('type', '?')}"
+            )
+        return msg.get("tools", [])
 
     # ── Run ────────────────────────────────────────────────────────────
 
@@ -72,15 +135,11 @@ class Agent:
         Yields:
             :class:`Event` objects — one per protocol event.
         """
-        if self._proc is None:
-            self._proc = PhiProcess(phi_path=self._phi_path)
-            await self._proc.start()
-            await self._proc.handshake()
-            await self._register_tools()
+        await self._ensure_started()
 
         stream = self._proc.stream
 
-        # Send run request
+        # Send run request with full config
         config: dict[str, Any] = {
             "model": self._model,
             "enable_thinking": self._enable_thinking,
@@ -90,8 +149,16 @@ class Agent:
             config["api_key"] = self._api_key
         if self._base_url:
             config["base_url"] = self._base_url
+        if self._thinking_budget is not None:
+            config["thinking_budget"] = self._thinking_budget
+        if self._max_tool_calls_per_turn is not None:
+            config["max_tool_calls_per_turn"] = self._max_tool_calls_per_turn
+        if self._max_consecutive_failures is not None:
+            config["max_consecutive_failures"] = self._max_consecutive_failures
+        if self._max_turns is not None:
+            config["max_turns"] = self._max_turns
 
-        await stream.send({
+        await stream.send({  # type: ignore[union-attr]
             "type": "run",
             "session_id": session_id or "",
             "query": query,
@@ -100,7 +167,7 @@ class Agent:
 
         # Stream events until "done"
         while True:
-            msg = await stream.recv()
+            msg = await stream.recv()  # type: ignore[union-attr]
             msg_type = msg.get("type", "")
 
             if msg_type == "event":
@@ -123,6 +190,15 @@ class Agent:
                 pass
 
     # ── Internals ──────────────────────────────────────────────────────
+
+    async def _ensure_started(self) -> None:
+        """Start the phi process and register tools if not already running."""
+        if self._proc is not None:
+            return
+        self._proc = PhiProcess(phi_path=self._phi_path)
+        await self._proc.start()
+        await self._proc.handshake()
+        await self._register_tools()
 
     async def _register_tools(self) -> None:
         """Send all registered tool definitions to the Rust runtime."""

@@ -287,3 +287,75 @@ async def test_ms_09_multiple_events_then_done(mock_stream: MockStream) -> None:
     assert events[1].text == "part1"
     assert events[2].type == "textDelta"
     assert events[2].text == "part2"
+
+
+# ── MS-10: 完整 RunConfig 参数 ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_ms_10_full_run_config_sent(mock_stream: MockStream) -> None:
+    """Agent.run() sends all configured RunConfig fields."""
+    mock_stream.feed(
+        {"type": "hello", "protocol_version": 1, "server_version": "0.2.7"},
+        {"type": "event", "runtimeEventType": "textDelta", "text": "ok"},
+        {"type": "done"},
+    )
+
+    with patch_agent(
+        mock_stream,
+        model="gpt-4o-mini",
+        api_key="sk-test",
+        base_url="https://api.example.com/v1",
+        enable_thinking=False,
+        thinking_effort="low",
+        thinking_budget=16000,
+        max_tool_calls_per_turn=10,
+        max_consecutive_failures=3,
+        max_turns=5,
+    ) as agent:
+        events = [e async for e in agent.run("test")]
+        assert len(events) == 1
+
+    # Check the run message includes all config fields
+    run_msg = [m for m in mock_stream.sent_messages if m["type"] == "run"][0]
+    cfg = run_msg["config"]
+    assert cfg["model"] == "gpt-4o-mini"
+    assert cfg["api_key"] == "sk-test"
+    assert cfg["base_url"] == "https://api.example.com/v1"
+    assert cfg["enable_thinking"] is False
+    assert cfg["thinking_effort"] == "low"
+    assert cfg["thinking_budget"] == 16000
+    assert cfg["max_tool_calls_per_turn"] == 10
+    assert cfg["max_consecutive_failures"] == 3
+    assert cfg["max_turns"] == 5
+
+
+# ── MS-11: RunConfig 无 None 字段 ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_ms_11_run_config_omits_none_fields(mock_stream: MockStream) -> None:
+    """Agent.run() does not include None-valued optional config fields."""
+    mock_stream.feed(
+        {"type": "hello", "protocol_version": 1, "server_version": "0.2.7"},
+        {"type": "event", "runtimeEventType": "textDelta", "text": "ok"},
+        {"type": "done"},
+    )
+
+    with patch_agent(mock_stream, model="test-model") as agent:
+        events = [e async for e in agent.run("test")]
+        assert len(events) == 1
+
+    run_msg = [m for m in mock_stream.sent_messages if m["type"] == "run"][0]
+    cfg = run_msg["config"]
+    # These should be present (always sent)
+    assert "model" in cfg
+    assert "enable_thinking" in cfg
+    assert "thinking_effort" in cfg
+    # These should NOT be present (None values omitted)
+    assert "thinking_budget" not in cfg
+    assert "max_tool_calls_per_turn" not in cfg
+    assert "max_consecutive_failures" not in cfg
+    assert "max_turns" not in cfg
+    assert "api_key" not in cfg
+    assert "base_url" not in cfg
